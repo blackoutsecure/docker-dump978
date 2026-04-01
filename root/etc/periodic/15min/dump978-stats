@@ -1,0 +1,21 @@
+#!/bin/sh
+# Periodic receiver stats — logs aircraft count and message rate from skyaware978 JSON.
+# Runs every 15 minutes via crond.
+
+DATA_DIR="/run/skyaware978"
+AIRCRAFT_JSON="${DATA_DIR}/aircraft.json"
+
+if [ ! -f "${AIRCRAFT_JSON}" ]; then
+    printf '[stats] WARNING: %s not found — skyaware978 may not be running\n' "${AIRCRAFT_JSON}"
+    exit 0
+fi
+
+# Parse aircraft.json (lightweight — no jq dependency)
+now=$(grep -o '"now":[0-9.]*' "${AIRCRAFT_JSON}" | head -1 | cut -d: -f2)
+messages=$(grep -o '"messages":[0-9]*' "${AIRCRAFT_JSON}" | head -1 | cut -d: -f2)
+aircraft_count=$(grep -o '"hex":"[^"]*"' "${AIRCRAFT_JSON}" | wc -l)
+with_position=$(grep -o '"lat":[0-9.-]*' "${AIRCRAFT_JSON}" | wc -l)
+
+printf '[stats] aircraft: %d (with position: %d), messages: %s, timestamp: %s\n' \
+    "${aircraft_count}" "${with_position}" "${messages:-0}" \
+    "$(date -u -d "@${now%%.*}" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || echo "${now:-unknown}")"

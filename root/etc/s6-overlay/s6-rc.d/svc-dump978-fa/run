@@ -1,0 +1,85 @@
+#!/usr/bin/with-contenv bash
+
+set -euo pipefail
+
+# Source configuration
+source /etc/default/dump978-fa
+
+sdr_device="${DUMP978_SDR:-driver=rtlsdr}"
+sdr_gain="${DUMP978_SDR_GAIN:-}"
+sdr_auto_gain="${DUMP978_SDR_AUTO_GAIN:-}"
+sdr_ppm="${DUMP978_SDR_PPM:-}"
+sdr_antenna="${DUMP978_SDR_ANTENNA:-}"
+sdr_device_settings="${DUMP978_SDR_DEVICE_SETTINGS:-}"
+sdr_stream_settings="${DUMP978_SDR_STREAM_SETTINGS:-}"
+sample_format="${DUMP978_FORMAT:-}"
+stratux_device="${DUMP978_STRATUX:-}"
+raw_port="${DUMP978_RAW_PORT:-30978}"
+json_port="${DUMP978_JSON_PORT:-30979}"
+raw_legacy_port="${DUMP978_RAW_LEGACY_PORT:-}"
+extra_args="${DUMP978_EXTRA_ARGS:-}"
+
+printf '[dump978-fa] starting 978 MHz UAT decoder\n'
+printf '[dump978-fa] raw port: %s, json port: %s\n' "${raw_port}" "${json_port}"
+
+# Build command arguments
+DUMP978_ARGS=(
+    --raw-port "${raw_port}"
+    --json-port "${json_port}"
+)
+
+# Input source: Stratux serial or SDR (default)
+if [[ -n "${stratux_device}" ]]; then
+    DUMP978_ARGS+=(--stratuxv3 "${stratux_device}")
+    printf '[dump978-fa] input: Stratux v3 serial device %s\n' "${stratux_device}"
+else
+    DUMP978_ARGS+=(--sdr "${sdr_device}")
+    printf '[dump978-fa] SDR device: %s\n' "${sdr_device}"
+
+    if [[ -n "${sdr_auto_gain}" && "${sdr_auto_gain}" =~ ^(true|yes|1)$ ]]; then
+        DUMP978_ARGS+=(--sdr-auto-gain)
+        printf '[dump978-fa] SDR auto-gain: enabled\n'
+    elif [[ -n "${sdr_gain}" ]]; then
+        DUMP978_ARGS+=(--sdr-gain "${sdr_gain}")
+        printf '[dump978-fa] SDR gain: %s\n' "${sdr_gain}"
+    fi
+
+    if [[ -n "${sdr_ppm}" ]]; then
+        DUMP978_ARGS+=(--sdr-ppm "${sdr_ppm}")
+        printf '[dump978-fa] SDR PPM correction: %s\n' "${sdr_ppm}"
+    fi
+
+    if [[ -n "${sdr_antenna}" ]]; then
+        DUMP978_ARGS+=(--sdr-antenna "${sdr_antenna}")
+        printf '[dump978-fa] SDR antenna: %s\n' "${sdr_antenna}"
+    fi
+
+    if [[ -n "${sdr_device_settings}" ]]; then
+        DUMP978_ARGS+=(--sdr-device-settings "${sdr_device_settings}")
+        printf '[dump978-fa] SDR device settings: %s\n' "${sdr_device_settings}"
+    fi
+
+    if [[ -n "${sdr_stream_settings}" ]]; then
+        DUMP978_ARGS+=(--sdr-stream-settings "${sdr_stream_settings}")
+        printf '[dump978-fa] SDR stream settings: %s\n' "${sdr_stream_settings}"
+    fi
+fi
+
+if [[ -n "${sample_format}" ]]; then
+    DUMP978_ARGS+=(--format "${sample_format}")
+    printf '[dump978-fa] sample format: %s\n' "${sample_format}"
+fi
+
+if [[ -n "${raw_legacy_port}" ]]; then
+    DUMP978_ARGS+=(--raw-legacy-port "${raw_legacy_port}")
+    printf '[dump978-fa] raw legacy port: %s\n' "${raw_legacy_port}"
+fi
+
+# Append extra args if provided
+if [[ -n "${extra_args}" ]]; then
+    # shellcheck disable=SC2206
+    DUMP978_ARGS+=(${extra_args})
+    printf '[dump978-fa] extra args: %s\n' "${extra_args}"
+fi
+
+exec dump978-fa "${DUMP978_ARGS[@]}"

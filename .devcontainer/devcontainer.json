@@ -1,0 +1,22 @@
+{
+  "name": "docker-dump978",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "forwardPorts": [8978, 30978, 30979],
+  "portsAttributes": {
+    "8978": {
+      "label": "SkyAware978 Web UI",
+      "onAutoForward": "notify"
+    },
+    "30978": {
+      "label": "dump978 Raw",
+      "onAutoForward": "silent"
+    },
+    "30979": {
+      "label": "dump978 JSON",
+      "onAutoForward": "silent"
+    }
+  }
+}

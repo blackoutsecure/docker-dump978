@@ -1,0 +1,5 @@
+#!/bin/sh
+# Override LSIO base crond to reduce log verbosity.
+# Default level 5 dumps the full crontab every 60s to Docker logs.
+# Level 8 = only errors, keeping logs clean for receiver output.
+exec crond -f -l 8

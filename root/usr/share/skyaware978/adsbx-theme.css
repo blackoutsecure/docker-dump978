@@ -1,0 +1,134 @@
+/*
+ * ADS-B Exchange profile theme for SkyAware978
+ * Overrides FlightAware navy/blue branding with ADSBX charcoal/green.
+ * Injected at runtime by init-dump978-config when DUMP978_PROFILE=adsbexchange.
+ */
+
+/* ── Header ──────────────────────────────────────────────────────────────── */
+#header {
+    background: #1B1B2F;
+    background: linear-gradient(#1B1B2F, #1B1B2F 60%, #111122);
+}
+
+.flightawareLogo {
+    background-color: #fff;
+    box-shadow: inset -12px 0 12px -12px rgba(0, 0, 0, 0.3);
+    min-width: 140px;
+    padding: 4px 12px;
+}
+
+.flightawareLogo img {
+    width: 100%;
+    height: auto;
+    object-fit: contain;
+}
+
+.dateTime {
+    color: #FFFFFF;
+}
+
+/* ── Buttons & accents ───────────────────────────────────────────────────── */
+.button {
+    background: #3DCC6E;
+    background: rgba(61, 204, 110, 1);
+}
+
+.sidebarButton {
+    background-color: #3DCC6E;
+}
+
+.sidebarButton:hover {
+    background-color: #2ea85a;
+}
+
+.stats_button {
+    background-color: rgba(61, 204, 110, 1);
+}
+
+.config_button {
+    background-color: #3DCC6E;
+    color: #FFFFFF;
+}
+
+.config_button:hover,
+.config_button_active {
+    background-color: #2ea85a;
+}
+
+/* ── Table header ────────────────────────────────────────────────────────── */
+.aircraft_table_header {
+    background-color: #1B1B2F;
+}
+
+/* ── Section titles ──────────────────────────────────────────────────────── */
+.sectionTitle {
+    background: #1B1B2F;
+}
+
+/* ── Text headings & accents ─────────────────────────────────────────────── */
+.infoHeading {
+    color: #1B1B2F;
+}
+
+.settingsHeading {
+    color: #1B1B2F;
+}
+
+.infoBlockTitleText {
+    color: #1B1B2F;
+}
+
+.identLarge {
+    color: #1B1B2F;
+}
+
+.identSmall {
+    color: #3DCC6E;
+}
+
+/* ── Links ───────────────────────────────────────────────────────────────── */
+.lightblue-link, .lightblue-link a {
+    color: #3DCC6E;
+}
+
+#close-button {
+    color: #3DCC6E;
+}
+
+/* ── Highlighted info block ──────────────────────────────────────────────── */
+.highlightedTitle {
+    border-bottom-color: #3DCC6E;
+}
+
+/* ── Panels & borders ────────────────────────────────────────────────────── */
+.panel {
+    border-color: #1B1B2F;
+}
+
+#splitter-infoblock {
+    background-color: #4a6a5e;
+    border-bottom-color: #1B1B2F;
+}
+
+/* ── Slider controls ─────────────────────────────────────────────────────── */
+.noUi-horizontal .noUi-handle,
+.noUi-vertical .noUi-handle {
+    background: #3DCC6E;
+}
+
+.noUi-connect {
+    background: #3DCC6E !important;
+}
+
+/* ── Bottom info & FA link ───────────────────────────────────────────────── */
+.bottom-info-container {
+    color: #1B1B2F;
+}
+
+#selected_flightaware_link a {
+    background-color: #3DCC6E;
+}
+
+.selected_airframe a {
+    color: #1B1B2F;
+}

@@ -1,0 +1,233 @@
+#!/usr/bin/with-contenv bash
+
+set -euo pipefail
+
+dump978_user=${DUMP978_USER:-abc}
+dump978_web_port=${DUMP978_WEB_PORT:-8978}
+
+# ── Profile selection ──────────────────────────────────────────────────────
+# DUMP978_PROFILE controls default branding, feeder config, and TIS-B filtering.
+# Valid values: "flightaware" (default), "adsbexchange"
+dump978_profile="${DUMP978_PROFILE:-flightaware}"
+dump978_profile="${dump978_profile,,}"  # lowercase
+
+case "${dump978_profile}" in
+    flightaware|adsbexchange) ;;
+    *)
+        printf '[init] WARNING: unknown DUMP978_PROFILE="%s", falling back to "flightaware"\n' "${dump978_profile}" >&2
+        dump978_profile="flightaware"
+        ;;
+esac
+printf '[init] profile: %s\n' "${dump978_profile}"
+
+# Apply profile-aware defaults
+case "${dump978_profile}" in
+    flightaware)
+        _profile_page_name="SkyAware978 - dump978"
+        _profile_site_name="FlightAware UAT"
+        _profile_tisb_filter="false"
+        _profile_enable_faup978="${DUMP978_ENABLE_FAUP978:-true}"
+        ;;
+    adsbexchange)
+        _profile_page_name="ADS-B Exchange UAT - dump978"
+        _profile_site_name="ADS-B Exchange"
+        _profile_tisb_filter="true"
+        _profile_enable_faup978="${DUMP978_ENABLE_FAUP978:-false}"
+        ;;
+esac
+
+# Export profile-derived values so downstream services can read them
+# Write to s6-overlay container_environment so with-contenv picks them up
+_s6_env="/run/s6/container_environment"
+printf '%s' "${dump978_profile}"              > "${_s6_env}/DUMP978_PROFILE"
+printf '%s' "${_profile_enable_faup978}"      > "${_s6_env}/DUMP978_ENABLE_FAUP978"
+printf '%s' "${DUMP978_TISB_FILTER:-${_profile_tisb_filter}}" > "${_s6_env}/DUMP978_TISB_FILTER"
+# Also set for use in this script
+export DUMP978_TISB_FILTER="${DUMP978_TISB_FILTER:-${_profile_tisb_filter}}"
+export DUMP978_ENABLE_FAUP978="${_profile_enable_faup978}"
+printf '[init] TIS-B filter: %s, faup978: %s\n' "$(cat "${_s6_env}/DUMP978_TISB_FILTER")" "${_profile_enable_faup978}"
+
+if [[ "${dump978_user}" != "root" && "${dump978_user}" == "abc" ]]; then
+    [[ -z ${PUID:-} ]] && export PUID=911
+    [[ -z ${PGID:-} ]] && export PGID=911
+fi
+
+# Create required runtime directories
+mkdir -p /config /run/dump978-fa /run/skyaware978 \
+         /tmp/nginx-client-body /tmp/nginx-proxy-temp \
+         /tmp/nginx-fastcgi-temp /tmp/nginx-uwsgi-temp /tmp/nginx-scgi-temp 2>/dev/null || true
+
+# Install default config if not present in /config volume
+if [[ ! -f /config/dump978-fa ]]; then
+    cp /etc/default/dump978-fa /config/dump978-fa
+fi
+if [[ ! -f /config/skyaware978 ]]; then
+    cp /etc/default/skyaware978 /config/skyaware978
+fi
+
+# Symlink config files from /config to /etc/default for service scripts
+ln -snf /config/dump978-fa /etc/default/dump978-fa
+ln -snf /config/skyaware978 /etc/default/skyaware978
+
+# Source config
+source /etc/default/dump978-fa
+
+# Validate SDR configuration
+sdr_device="${DUMP978_SDR:-driver=rtlsdr}"
+printf '[init] SDR device: %s\n' "${sdr_device}"
+
+# Check for USB devices (informational only, not fatal)
+if [[ -d /dev/bus/usb ]]; then
+    _usb_count=$(find /dev/bus/usb -type c 2>/dev/null | wc -l)
+    printf '[init] USB devices visible: %d\n' "${_usb_count}"
+else
+    printf '[init] WARNING: /dev/bus/usb not found — ensure USB device passthrough is configured\n' >&2
+fi
+
+# Build status.json site_url fragment if stats URL is configured.
+# Profile-specific vars take precedence; DUMP978_STATS_URL is a generic fallback.
+case "${dump978_profile}" in
+    flightaware)  _profile_stats_url="${DUMP978_FA_STATS_URL:-}" ;;
+    adsbexchange) _profile_stats_url="${DUMP978_ADSBX_STATS_URL:-https://adsbexchange.com/myip/}" ;;
+esac
+stats_url="${_profile_stats_url:-${DUMP978_STATS_URL:-}}"
+if [[ -n "${stats_url}" ]]; then
+    # Escape special chars for safe JSON/sed embedding (quotes, backslash, forward slash, ampersand)
+    safe_url=$(printf '%s' "${stats_url}" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/[&/]/\\&/g')
+    status_site_url_fragment=",\"site_url\":\"${safe_url}\""
+    printf '[init] stats page URL (%s): %s\n' "${dump978_profile}" "${stats_url}"
+else
+    status_site_url_fragment=""
+fi
+
+# Render nginx config from template
+mkdir -p /run/nginx/http.d 2>/dev/null || true
+
+# Build profile-aware status.json radio type label
+case "${dump978_profile}" in
+    adsbexchange) _radio_type="dump978-fa (ADS-B Exchange)" ;;
+    *)            _radio_type="dump978-fa" ;;
+esac
+
+sed -e "s|\${DUMP978_WEB_PORT}|${dump978_web_port}|" \
+    -e "s|\${DUMP978_STATUS_SITE_URL_FRAGMENT}|${status_site_url_fragment}|" \
+    -e "s|\${DUMP978_RADIO_TYPE}|${_radio_type}|" \
+    /etc/nginx/http.d/default.conf.template \
+    > /run/nginx/http.d/default.conf
+
+# ── Auto-location detection ────────────────────────────────────────────────
+# Detect receiver location early so it's available for config.js and services.
+# Explicit DUMP978_LAT/DUMP978_LON always take priority.
+receiver_lat="${DUMP978_LAT:-}"
+receiver_lon="${DUMP978_LON:-}"
+auto_location="${DUMP978_AUTO_LOCATION:-true}"
+
+if [[ -z "${receiver_lat}" || -z "${receiver_lon}" ]] && [[ "${auto_location}" =~ ^(true|yes|1)$ ]]; then
+    # NOTE: ip-api.com free tier only supports HTTP — HTTPS requires a paid plan.
+    # This request sends only the container's public IP; no PII is transmitted.
+    if geo_json=$(wget -qO- -T 5 "http://ip-api.com/json/?fields=status,query,lat,lon,city,regionName,country,isp,timezone" 2>/dev/null); then
+        geo_status=$(printf '%s' "${geo_json}" | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
+        if [[ "${geo_status}" == "success" ]]; then
+            geo_ip=$(printf '%s' "${geo_json}" | grep -o '"query":"[^"]*"' | cut -d'"' -f4)
+            receiver_lat=$(printf '%s' "${geo_json}" | grep -o '"lat":[0-9.eE+-]*' | cut -d: -f2)
+            receiver_lon=$(printf '%s' "${geo_json}" | grep -o '"lon":[0-9.eE+-]*' | cut -d: -f2)
+            geo_city=$(printf '%s' "${geo_json}" | grep -o '"city":"[^"]*"' | cut -d'"' -f4)
+            geo_region=$(printf '%s' "${geo_json}" | grep -o '"regionName":"[^"]*"' | cut -d'"' -f4)
+            geo_country=$(printf '%s' "${geo_json}" | grep -o '"country":"[^"]*"' | cut -d'"' -f4)
+            geo_isp=$(printf '%s' "${geo_json}" | grep -o '"isp":"[^"]*"' | cut -d'"' -f4)
+            geo_tz=$(printf '%s' "${geo_json}" | grep -o '"timezone":"[^"]*"' | cut -d'"' -f4)
+            printf '[init] auto-detected location via IP %s: %s, %s\n' "${geo_ip}" "${receiver_lat}" "${receiver_lon}"
+            printf '[init] approximate location: %s, %s, %s (tz: %s, isp: %s)\n' "${geo_city}" "${geo_region}" "${geo_country}" "${geo_tz}" "${geo_isp}"
+        fi
+    fi
+fi
+
+# Persist detected location in s6 environment for downstream services
+if [[ -n "${receiver_lat}" && -n "${receiver_lon}" ]]; then
+    printf '%s' "${receiver_lat}" > "${_s6_env}/DUMP978_LAT"
+    printf '%s' "${receiver_lon}" > "${_s6_env}/DUMP978_LON"
+fi
+
+# ── SkyAware config.js templating ──────────────────────────────────────────
+# Allow users to either supply a full custom config.js or override individual
+# settings via environment variables. A user-supplied file takes priority.
+# Profile defaults are applied first, then explicit env vars override them.
+skyaware_dir="/usr/share/skyaware978"
+if [[ -f /config/skyaware978-config.js ]]; then
+    printf '[init] using custom config.js from /config/skyaware978-config.js\n'
+    cp /config/skyaware978-config.js "${skyaware_dir}/config.js"
+else
+    cfg="${skyaware_dir}/config.js"
+
+    # Apply profile-specific defaults (user env vars override below)
+    page_name="${SKYAWARE_PAGE_NAME:-${_profile_page_name}}"
+    site_name="${SKYAWARE_SITE_NAME:-${_profile_site_name}}"
+    sed -i "s|^PageName = .*|PageName = \"${page_name}\";|" "${cfg}"
+    sed -i "s|^SiteName    = .*|SiteName    = \"${site_name}\";|" "${cfg}"
+
+    # Template remaining individual values from env vars
+    [[ -n "${SKYAWARE_DISPLAY_UNITS:-}" ]]          && sed -i "s|^DisplayUnits = .*|DisplayUnits = \"${SKYAWARE_DISPLAY_UNITS}\";|" "${cfg}"
+
+    # Center the map on the receiver location (explicit env var > auto-detected > default)
+    _center_lat="${SKYAWARE_DEFAULT_CENTER_LAT:-${receiver_lat:-}}"
+    _center_lon="${SKYAWARE_DEFAULT_CENTER_LON:-${receiver_lon:-}}"
+    [[ -n "${_center_lat}" ]]                       && sed -i "s|^DefaultCenterLat = .*|DefaultCenterLat = ${_center_lat};|" "${cfg}"
+    [[ -n "${_center_lon}" ]]                       && sed -i "s|^DefaultCenterLon = .*|DefaultCenterLon = ${_center_lon};|" "${cfg}"
+
+    # Set site marker position (enables center marker + range rings)
+    if [[ -n "${_center_lat}" && -n "${_center_lon}" ]]; then
+        sed -i "s|^SiteShow    = .*|SiteShow    = true;|" "${cfg}"
+        sed -i "s|^SiteLat     = .*|SiteLat     = ${_center_lat};|" "${cfg}"
+        sed -i "s|^SiteLon     = .*|SiteLon     = ${_center_lon};|" "${cfg}"
+        printf '[init] config.js: center=%s,%s (site marker enabled)\n' "${_center_lat}" "${_center_lon}"
+    fi
+    [[ -n "${SKYAWARE_DEFAULT_ZOOM:-}" ]]           && sed -i "s|^DefaultZoomLvl   = .*|DefaultZoomLvl   = ${SKYAWARE_DEFAULT_ZOOM};|" "${cfg}"
+    [[ -n "${SKYAWARE_SITE_CIRCLES:-}" ]]           && sed -i "s|^SiteCircles = .*|SiteCircles = ${SKYAWARE_SITE_CIRCLES};|" "${cfg}"
+    [[ -n "${SKYAWARE_SITE_CIRCLES_COUNT:-}" ]]     && sed -i "s|^DefaultSiteCirclesCount = .*|DefaultSiteCirclesCount = ${SKYAWARE_SITE_CIRCLES_COUNT};|" "${cfg}"
+    [[ -n "${SKYAWARE_SITE_CIRCLES_BASE:-}" ]]      && sed -i "s|^DefaultSiteCirclesBaseDistance = .*|DefaultSiteCirclesBaseDistance = ${SKYAWARE_SITE_CIRCLES_BASE};|" "${cfg}"
+    [[ -n "${SKYAWARE_SITE_CIRCLES_INTERVAL:-}" ]]  && sed -i "s|^DefaultSiteCirclesInterval = .*|DefaultSiteCirclesInterval = ${SKYAWARE_SITE_CIRCLES_INTERVAL};|" "${cfg}"
+    [[ -n "${SKYAWARE_SHOW_FLAGS:-}" ]]             && sed -i "s|^ShowFlags = .*|ShowFlags = ${SKYAWARE_SHOW_FLAGS};|" "${cfg}"
+    [[ -n "${SKYAWARE_CHARTBUNDLE:-}" ]]            && sed -i "s|^ChartBundleLayers = .*|ChartBundleLayers = ${SKYAWARE_CHARTBUNDLE};|" "${cfg}"
+    [[ -n "${SKYAWARE_BING_API_KEY:-}" ]]           && sed -i "s|^BingMapsAPIKey = .*|BingMapsAPIKey = \"${SKYAWARE_BING_API_KEY}\";|" "${cfg}"
+    [[ -n "${SKYAWARE_EXTENDED_DATA:-}" ]]          && sed -i "s|^ExtendedData = .*|ExtendedData = ${SKYAWARE_EXTENDED_DATA};|" "${cfg}"
+    [[ -n "${SKYAWARE_PLANE_COUNT_IN_TITLE:-}" ]]   && sed -i "s|^PlaneCountInTitle = .*|PlaneCountInTitle = ${SKYAWARE_PLANE_COUNT_IN_TITLE};|" "${cfg}"
+    [[ -n "${SKYAWARE_MSG_RATE_IN_TITLE:-}" ]]      && sed -i "s|^MessageRateInTitle = .*|MessageRateInTitle = ${SKYAWARE_MSG_RATE_IN_TITLE};|" "${cfg}"
+    printf '[init] SkyAware config.js configured (profile: %s)\n' "${dump978_profile}"
+fi
+
+# ── Cache-busting ──────────────────────────────────────────────────────────
+# Replace static version query strings with a timestamp so browsers always
+# fetch fresh assets after a container restart.
+_cache_bust=$(date +%s)
+html="${skyaware_dir}/index.html"
+if [[ -f "${html}" ]]; then
+    sed -i "s|?v=[0-9.]*\"|?v=${_cache_bust}\"|g" "${html}"
+fi
+
+# ── Profile-aware branding ─────────────────────────────────────────────────
+# Swap the FlightAware logo and link in the SkyAware978 HTML for non-FA profiles.
+if [[ "${dump978_profile}" == "adsbexchange" ]]; then
+    html="${skyaware_dir}/index.html"
+    if [[ -f "${html}" ]]; then
+        # Replace FA logo image with ADSBX logo
+        sed -i 's|images/fa_logo_color@2x\.png|images/adsbexchange_logo.png|g' "${html}"
+        # Replace FA link with ADSBX link
+        sed -Ei 's|https?://(www\.)?flightaware\.com[^"]*|https://www.adsbexchange.com/|g' "${html}"
+        # Replace header title text
+        sed -i 's|PiAware <span.*SkyAware</span>|ADS-B Exchange <span style="color: #3DCC6E;">SkyAware</span>|g' "${html}"
+        # Inject ADSBX theme CSS override before </head>
+        if [[ -f "${skyaware_dir}/adsbx-theme.css" ]]; then
+            sed -i "s|</head>|<link rel=\"stylesheet\" href=\"adsbx-theme.css?v=${_cache_bust}\" />\n</head>|" "${html}"
+        fi
+        printf '[init] branding updated for profile: %s\n' "${dump978_profile}"
+    fi
+fi
+
+# Set ownership
+if [[ -z ${LSIO_NON_ROOT_USER:-} ]]; then
+    lsiown -R "${dump978_user}:${dump978_user}" \
+        /config /run/nginx /run/dump978-fa /run/skyaware978 \
+        /usr/share/dump978-fa /usr/share/skyaware978 2>/dev/null || true
+fi
+
+printf '[init] dump978 initialization complete\n'

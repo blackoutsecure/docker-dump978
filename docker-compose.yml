@@ -1,0 +1,40 @@
+services:
+  dump978:
+    image: docker.io/blackoutsecure/dump978:latest
+    container_name: dump978
+    environment:
+      TZ: Etc/UTC
+      DUMP978_PROFILE: "adsbexchange"
+      DUMP978_SDR: "driver=rtlsdr,serial=978"
+      DUMP978_SDR_AUTO_GAIN: "true"
+      DUMP978_WEB_PORT_EXTERNAL: "8080"
+      DUMP978_RAW_PORT: "30978"
+      DUMP978_JSON_PORT: "30979"
+      DUMP978_AUTO_LOCATION: "true"
+    volumes:
+      - config:/config
+      - dump978-run:/run/dump978-fa
+    ports:
+      - "8080:8978"
+      - "30978:30978"
+      - "30979:30979"
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETUID
+      - SETGID
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+      - /run:exec,uid=911,gid=911
+    restart: unless-stopped
+
+volumes:
+  config:
+  dump978-run:

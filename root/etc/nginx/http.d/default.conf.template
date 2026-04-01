@@ -1,0 +1,73 @@
+server {
+    listen ${DUMP978_WEB_PORT} default_server;
+    server_name _;
+
+    gzip on;
+    gzip_types application/json text/plain text/css application/javascript;
+
+    # HTML pages: never cache so new ?v= cache-busting URLs always take effect
+    location = / {
+        alias /usr/share/skyaware978/;
+        try_files /index.html =404;
+        add_header Cache-Control "no-store, no-cache, must-revalidate";
+        add_header Access-Control-Allow-Origin "*";
+    }
+
+    # Prevent caching of config.js so profile/location changes take effect immediately
+    location = /config.js {
+        alias /usr/share/skyaware978/config.js;
+        add_header Cache-Control "no-store, no-cache, must-revalidate";
+        add_header Access-Control-Allow-Origin "*";
+    }
+
+    # Static assets: cache-busted via ?v=timestamp in index.html, so allow caching
+    location / {
+        alias /usr/share/skyaware978/;
+        try_files $uri $uri/ =404;
+        add_header Cache-Control "public, max-age=3600";
+        add_header Access-Control-Allow-Origin "*";
+    }
+
+    # Serve live aircraft JSON data from skyaware978 writer
+    # Missing history files return empty JSON to avoid browser console 404 errors
+    location /data/ {
+        alias /run/skyaware978/;
+        add_header Cache-Control "public, max-age=0";
+        add_header Access-Control-Allow-Origin "*";
+        try_files $uri @empty_json;
+        log_not_found off;
+        access_log off;
+    }
+    location @empty_json {
+        default_type application/json;
+        return 200 '{"now":0,"messages":0,"aircraft":[]}';
+        access_log off;
+    }
+
+    # Return valid stub for SkyAware978 JS probes that don't apply to dump978
+    location = /status.json {
+        default_type application/json;
+        add_header Access-Control-Allow-Origin "*";
+        return 200 '{"radio":{"type":"${DUMP978_RADIO_TYPE}","supported":true,"status":"green","message":"Normal"},"piaware":{"status":"not_running","message":"N/A"},"adept":{"status":"not_running","message":"N/A"},"unclaimed_feeders":[]${DUMP978_STATUS_SITE_URL_FRAGMENT}}';
+        access_log off;
+    }
+    location = /upintheair.json {
+        default_type application/json;
+        add_header Access-Control-Allow-Origin "*";
+        return 200 '{"rings":[]}';
+        access_log off;
+    }
+
+    # Serve favicon — try PNG from SkyAware978, otherwise return empty 204
+    location = /favicon.ico {
+        alias /usr/share/skyaware978/images/;
+        try_files favicon.png favicon.ico =204;
+        access_log off;
+        log_not_found off;
+    }
+
+    # Redirect unknown paths (e.g. /graphs1090/) to root
+    location ~* ^/(graphs1090|tar1090|piaware|dump1090) {
+        return 302 /;
+    }
+}

@@ -1,0 +1,40 @@
+#!/usr/bin/with-contenv bash
+
+set -euo pipefail
+
+# faup978 is an optional service — enabled by default for flightaware profile,
+# disabled by default for adsbexchange profile. Override with DUMP978_ENABLE_FAUP978.
+enable_faup978="${DUMP978_ENABLE_FAUP978:-false}"
+dump978_profile="${DUMP978_PROFILE:-flightaware}"
+if [[ ! "${enable_faup978}" =~ ^(true|yes|1)$ ]]; then
+    printf '[faup978] disabled (profile: %s, set DUMP978_ENABLE_FAUP978=true to enable)\n' "${dump978_profile}"
+    exec s6-svc -Od /run/service/svc-faup978
+fi
+
+raw_port="${DUMP978_RAW_PORT:-30978}"
+connect="${FAUP978_CONNECT:-localhost:${raw_port}}"
+
+# Wait for dump978-fa to start accepting connections
+WAIT_MAX=60
+WAIT=0
+while [[ ${WAIT} -lt ${WAIT_MAX} ]]; do
+    if bash -c "echo > /dev/tcp/localhost/${raw_port}" 2>/dev/null; then
+        break
+    fi
+    if [[ ${WAIT} -eq 0 ]]; then
+        printf '[faup978] waiting for dump978-fa on port %s...\n' "${raw_port}"
+    fi
+    sleep 2
+    WAIT=$((WAIT + 2))
+done
+
+if [[ ${WAIT} -ge ${WAIT_MAX} ]]; then
+    printf '[faup978] WARNING: timed out after %ds waiting for dump978-fa, starting anyway\n' "${WAIT_MAX}" >&2
+else
+    printf '[faup978] dump978-fa detected on port %s after %ds\n' "${raw_port}" "${WAIT}"
+fi
+
+printf '[faup978] starting FlightAware UAT reporter\n'
+printf '[faup978] connect: %s\n' "${connect}"
+
+exec faup978 --connect "${connect}"

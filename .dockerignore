@@ -1,0 +1,51 @@
+# CI/CD and VCS
+.github/
+.git
+.git/**
+.gitignore
+.gitattributes
+.gitmodules
+
+# Compose and orchestration (not needed in build context)
+docker-compose.yml
+#balena.yml
+
+# Documentation (not needed in build context)
+README.md
+LICENSE
+
+# Configuration (non-build)
+readme-vars.yml
+.editorconfig
+.hadolint.yaml
+
+# Development and local artifacts
+local/
+.local/
+.cache/
+tmp/
+sample-data/
+.devcontainer/
+.vscode/
+
+# Build artifacts
+*.o
+*.so
+*.a
+*.log
+*.tmp
+
+# Documentation
+README.md
+LICENSE
+CONTRIBUTING.md
+CODE_OF_CONDUCT.md
+SECURITY.md
+CHANGELOG.md
+logo.png
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~

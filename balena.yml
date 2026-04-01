@@ -1,0 +1,54 @@
+name: dump978
+description: >-
+  LinuxServer.io-style containerized build of dump978-fa — FlightAware 978 MHz
+  UAT decoder with SkyAware978 web UI, SoapySDR support, and hardened container
+  defaults for ADS-B/UAT reception workloads.
+
+post-provisioning: >-
+  ## Usage instructions
+
+  Include this snippet in your docker-compose.yml file under 'services':
+
+    ```
+    dump978:
+      image: blackoutsecure/dump978:latest
+      restart: unless-stopped
+      environment:
+        - TZ=Etc/UTC
+        - DUMP978_SDR=driver=rtlsdr
+      ports:
+        - '8978:8978'
+        - '30978:30978'
+        - '30979:30979'
+      volumes:
+        - '/path/to/dump978/config:/config'
+        - '/run/dump978-fa:/run/dump978-fa'
+      devices:
+        - '/dev/bus/usb:/dev/bus/usb'
+    ```
+
+  Repository: https://github.com/blackoutsecure/docker-dump978
+  Upstream application: https://github.com/flightaware/dump978
+
+version: 10.2.0
+type: sw.block
+assets:
+  repository:
+    type: blob.asset
+    data:
+      url: 'https://github.com/blackoutsecure/docker-dump978'
+  logo:
+    type: blob.asset
+    data:
+      url: 'https://raw.githubusercontent.com/blackoutsecure/docker-dump978/main/logo.png'
+data:
+  defaultDeviceType: raspberrypi3
+  supportedDeviceTypes:
+    - raspberrypi3
+    - raspberrypi3-64
+    - raspberrypi4
+    - raspberrypi4-64
+    - raspberrypi400
+    - raspberrypi400-64
+    - intel-nuc
+    - genericx86-64-ext

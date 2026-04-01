@@ -1,0 +1,23 @@
+#!/usr/bin/with-contenv bash
+
+set -euo pipefail
+
+dump978_web_port=${DUMP978_WEB_PORT:-8978}
+dump978_web_port_ext=${DUMP978_WEB_PORT_EXTERNAL:-${dump978_web_port}}
+
+printf '[nginx] starting dump978 web UI on port %s\n' "${dump978_web_port}"
+
+# Background task: wait for nginx to actually listen, then log
+(
+    for _ in $(seq 1 30); do
+        if wget -q --spider "http://127.0.0.1:${dump978_web_port}/" 2>/dev/null; then
+            printf '[nginx] web server running on port %s\n' "${dump978_web_port}"
+            printf '[nginx] connection ready: http://<host-ip>:%s/\n' "${dump978_web_port_ext}"
+            exit 0
+        fi
+        sleep 0.5
+    done
+    printf '[nginx] WARNING: port %s not detected after 15s\n' "${dump978_web_port}" >&2
+) &
+
+exec nginx -g 'daemon off;'

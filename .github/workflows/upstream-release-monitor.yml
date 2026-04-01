@@ -1,0 +1,211 @@
+name: Monitor Upstream Releases
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      force_publish:
+        description: 'Dispatch publish workflow even if upstream metadata is unchanged'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || 'schedule' }}
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_REPO: flightaware/dump978
+  UPSTREAM_BRANCH: master
+  TRACK_FILE: .github/upstream/dump978-master.json
+  TARGET_WORKFLOW_DOCKER: publish.yml
+  GIT_CONFIG_USER_NAME: github-actions[bot]
+  GIT_CONFIG_USER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch upstream dump978 metadata and detect changes
+        id: check
+        run: |
+          set -euo pipefail
+
+          mkdir -p "$(dirname "${TRACK_FILE}")"
+
+          echo "--- Fetching upstream metadata ---"
+          echo "Repo:   ${UPSTREAM_REPO}"
+          echo "Branch: ${UPSTREAM_BRANCH}"
+
+          TMPDIR="$(mktemp -d)"
+          trap 'rm -rf "${TMPDIR}"' EXIT
+
+          git init "${TMPDIR}" >/dev/null 2>&1
+          git -C "${TMPDIR}" remote add origin "https://github.com/${UPSTREAM_REPO}.git" 2>&1
+          git -C "${TMPDIR}" fetch --depth 1 origin "${UPSTREAM_BRANCH}" >/dev/null 2>&1
+
+          upstream_commit="$(git -C "${TMPDIR}" rev-parse FETCH_HEAD 2>/dev/null)"
+          upstream_commit_short="${upstream_commit:0:12}"
+          upstream_version="$(git -C "${TMPDIR}" show FETCH_HEAD:debian/changelog 2>/dev/null | head -1 | awk '{print $2}' | tr -d '()' || echo unknown)"
+
+          # Normalize version to x.x.x format (append .0 if only x.x)
+          if [[ "${upstream_version}" =~ ^[0-9]+\.[0-9]+$ ]]; then
+            upstream_version="${upstream_version}.0"
+          fi
+
+          echo "Upstream commit:  ${upstream_commit_short}"
+          echo "Upstream version: ${upstream_version} (from debian/changelog)"
+
+          if [ -z "${upstream_commit}" ]; then
+            echo "ERROR: Failed to fetch upstream commit"
+            exit 1
+          fi
+
+          jq -n \
+            --arg commit "${upstream_commit}" \
+            --arg commit_short "${upstream_commit_short}" \
+            --arg branch "${UPSTREAM_BRANCH}" \
+            --arg version "${upstream_version}" \
+            '{"branch": $branch, "commit": $commit, "commit_short": $commit_short, "version": $version}' \
+            > /tmp/upstream-dump978.json
+
+          echo "upstream_commit=${upstream_commit}" >> "$GITHUB_OUTPUT"
+          echo "upstream_commit_short=${upstream_commit_short}" >> "$GITHUB_OUTPUT"
+          echo "upstream_version=${upstream_version}" >> "$GITHUB_OUTPUT"
+
+          echo "--- Comparing with tracked metadata ---"
+          if [ -f "${TRACK_FILE}" ]; then
+            echo "Tracked file exists: ${TRACK_FILE}"
+            echo "Tracked contents:"
+            cat "${TRACK_FILE}"
+            echo ""
+            if cmp -s "${TRACK_FILE}" /tmp/upstream-dump978.json; then
+              echo "Result: NO CHANGE"
+              echo "changed=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "Result: CHANGED"
+              diff "${TRACK_FILE}" /tmp/upstream-dump978.json || true
+              echo "changed=true" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "Tracked file not found — first run"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update tracked metadata file
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          echo "Writing updated metadata to ${TRACK_FILE}"
+          cp /tmp/upstream-dump978.json "${TRACK_FILE}"
+          cat "${TRACK_FILE}"
+
+      - name: Commit tracked metadata changes
+        if: steps.check.outputs.changed == 'true'
+        env:
+          UPSTREAM_COMMIT: ${{ steps.check.outputs.upstream_commit }}
+        run: |
+          set -euo pipefail
+
+          git config user.name "${GIT_CONFIG_USER_NAME}"
+          git config user.email "${GIT_CONFIG_USER_EMAIL}"
+          git add "${TRACK_FILE}"
+
+          if git diff --cached --quiet; then
+            echo "No tracked metadata changes to commit."
+            exit 0
+          fi
+
+          UPSTREAM_COMMIT_SHORT="${UPSTREAM_COMMIT:0:12}"
+          COMMIT_MSG="chore(ci): track dump978 master (commit ${UPSTREAM_COMMIT_SHORT})"
+          echo "Committing: ${COMMIT_MSG}"
+          git commit -m "${COMMIT_MSG}"
+
+      - name: Push tracked metadata commit
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          echo "Pushing commit to origin"
+          git push
+          echo "Push complete"
+
+      - name: Trigger downstream workflows
+        if: steps.check.outputs.changed == 'true' || (github.event_name == 'workflow_dispatch' && inputs.force_publish)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+
+          dispatch() {
+            local workflow="$1"
+            echo "Dispatching ${workflow} on ${DEFAULT_BRANCH}"
+            curl -fsSL -X POST \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              "https://api.github.com/repos/${REPO}/actions/workflows/${workflow}/dispatches" \
+              -d "{\"ref\":\"${DEFAULT_BRANCH}\"}"
+            echo "Dispatch sent: ${workflow}"
+          }
+
+          dispatch "${TARGET_WORKFLOW_DOCKER}"
+          echo "All downstream workflows dispatched"
+
+      - name: Publish monitor summary
+        if: always()
+        env:
+          CHANGED: ${{ steps.check.outputs.changed }}
+          UPSTREAM_COMMIT: ${{ steps.check.outputs.upstream_commit }}
+          UPSTREAM_COMMIT_SHORT: ${{ steps.check.outputs.upstream_commit_short }}
+          UPSTREAM_VERSION: ${{ steps.check.outputs.upstream_version }}
+          EVENT_NAME: ${{ github.event_name }}
+          FORCE_PUBLISH: ${{ inputs.force_publish }}
+        run: |
+          changed="${CHANGED}"
+          force="${FORCE_PUBLISH:-false}"
+          triggered=false
+          trigger_reason=""
+
+          if [ "${changed}" = "true" ]; then
+            triggered=true
+            trigger_reason="upstream metadata changed"
+          elif [ "${EVENT_NAME}" = "workflow_dispatch" ] && [ "${force}" = "true" ]; then
+            triggered=true
+            trigger_reason="force_publish requested via workflow_dispatch"
+          fi
+
+          {
+            echo "## Upstream dump978 Monitor"
+            echo ""
+            echo "### Upstream"
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Repo | [${UPSTREAM_REPO}](https://github.com/${UPSTREAM_REPO}/tree/${UPSTREAM_BRANCH}) |"
+            echo "| Branch | \`${UPSTREAM_BRANCH}\` |"
+            echo "| Version | \`${UPSTREAM_VERSION}\` |"
+            echo "| Latest Commit | \`${UPSTREAM_COMMIT_SHORT}\` |"
+            echo ""
+            echo "### Run"
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Trigger | \`${EVENT_NAME}\` |"
+            if [ "${changed}" = "true" ]; then
+              echo "| Upstream changed | Yes |"
+            else
+              echo "| Upstream changed | No |"
+            fi
+            if [ "${triggered}" = "true" ]; then
+              echo "| Downstream triggered | Yes — ${trigger_reason} |"
+            else
+              echo "| Downstream triggered | No |"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
