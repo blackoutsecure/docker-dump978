@@ -25,7 +25,7 @@ This project packages upstream [flightaware/dump978](https://github.com/flightaw
 Quick links:
 
 - Docker Hub listing: [blackoutsecure/dump978](https://hub.docker.com/r/blackoutsecure/dump978)
-- Balena block listing: [dump978 block on Balena Hub](https://hub.balena.io/blocks/dump978)
+- Balena block listing: [dump978 block on Balena Hub](https://hub.balena.io/blocks/2354279/dump978)
 - GitHub repository: [blackoutsecure/docker-dump978](https://github.com/blackoutsecure/docker-dump978)
 - Upstream application: [flightaware/dump978](https://github.com/flightaware/dump978)
 
