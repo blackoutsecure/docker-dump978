@@ -1,3 +1,5 @@
+version: '2.4'
+
 services:
   dump978:
     image: docker.io/blackoutsecure/dump978:latest
