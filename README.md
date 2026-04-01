@@ -11,7 +11,7 @@
 [![Publish CI](https://img.shields.io/github/actions/workflow/status/blackoutsecure/docker-dump978/publish.yml?style=flat-square&label=publish%20ci&color=E7931D)](https://github.com/blackoutsecure/docker-dump978/actions/workflows/publish.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 
-Unofficial community image for [dump978-fa](https://github.com/flightaware/dump978), built with [LinuxServer.io](https://linuxserver.io/) style container patterns (s6, hardened defaults, practical runtime options) for 978 MHz UAT ADS-B decoding workloads.
+Containerized [dump978](https://github.com/flightaware/dump978) for decoding 978 MHz UAT ADS-B with RTL-SDR or SoapySDR on Linux.
 
 Sponsored and maintained by [Blackout Secure](https://blackoutsecure.app).
 
@@ -22,7 +22,7 @@ Sponsored and maintained by [Blackout Secure](https://blackoutsecure.app).
 
 ## Overview
 
-This project packages upstream [flightaware/dump978](https://github.com/flightaware/dump978) into an easy-to-run, LinuxServer.io-style container image with practical defaults for decoding 978 MHz UAT (Universal Access Transceiver) ADS-B signals using RTL-SDR or other SoapySDR-compatible devices.
+This project packages upstream [flightaware/dump978](https://github.com/flightaware/dump978) into a containerized build for decoding 978 MHz UAT ADS-B with RTL-SDR or SoapySDR on Linux.
 
 Quick links:
 

@@ -98,7 +98,7 @@ ARG VCS_URL
 LABEL build_version="Linuxserver.io version:- unknown Build-date:- unknown"
 LABEL maintainer="Blackout Secure - https://blackoutsecure.app/"
 LABEL org.opencontainers.image.title="docker-dump978" \
-    org.opencontainers.image.description="LinuxServer.io style containerized build of dump978-fa — 978 MHz UAT decoder with SkyAware978 web UI, SoapySDR support, hardened container defaults, and switchable FlightAware / ADS-B Exchange profiles." \
+    org.opencontainers.image.description="Containerized dump978 for decoding 978 MHz UAT ADS-B with RTL-SDR or SoapySDR on Linux" \
     org.opencontainers.image.url="${VCS_URL}" \
     org.opencontainers.image.source="${VCS_URL}" \
     org.opencontainers.image.revision="unknown" \

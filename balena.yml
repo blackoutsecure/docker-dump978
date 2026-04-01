@@ -1,8 +1,7 @@
 name: dump978
 description: >-
-  LinuxServer.io-style containerized build of dump978-fa — FlightAware 978 MHz
-  UAT decoder with SkyAware978 web UI, SoapySDR support, and hardened container
-  defaults for ADS-B/UAT reception workloads.
+  Containerized dump978 for decoding 978 MHz UAT ADS-B with RTL-SDR or
+  SoapySDR on Linux.
 
 post-provisioning: >-
   ## Usage instructions
