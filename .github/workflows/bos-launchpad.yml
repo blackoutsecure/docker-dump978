@@ -50,11 +50,17 @@ jobs:
       docker:           ${{ github.event_name != 'workflow_dispatch' || inputs.stage_docker }}
       balena:           ${{ github.event_name != 'workflow_dispatch' || inputs.stage_balena }}
 
-      upstream_repo:    wiedehopf/dump978
-      source:           github_branch_file
-      upstream_branch:  dev
-      track_file:       .github/upstream/dump978-dev.json
-      force_run:        ${{ github.event_name == 'workflow_dispatch' && inputs.force_run }}
+      upstream_repo:     flightaware/dump978
+      source:            github_branch_file
+      upstream_branch:   master
+      # flightaware/dump978 has no plain `version` file and no GitHub Releases.
+      # Their canonical version lives in `debian/changelog` as the first
+      # `dump978-fa (X.Y[.Z])` header. The hub's discover action extracts the
+      # first capture group and pads short SemVer (e.g. `11.0` → `11.0.0`).
+      version_file_path: debian/changelog
+      version_regex:     '^dump978-fa \((\d+(?:\.\d+){0,2})\)'
+      track_file:        .github/upstream/dump978-master.json
+      force_run:         ${{ github.event_name == 'workflow_dispatch' && inputs.force_run }}
       # When force_run is a manual dispatch, also bypass downstream caches
       # so the rebuild ACTUALLY produces a fresh image + balena release.
       # Without these, docker re-uses GHA layer cache (same digest) and balena
@@ -109,7 +115,7 @@ jobs:
           ```
 
         Repository: https://github.com/${{ github.repository }}
-        Upstream application: https://github.com/wiedehopf/dump978
+        Upstream application: https://github.com/flightaware/dump978
     secrets:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN:    ${{ secrets.DOCKERHUB_TOKEN }}
