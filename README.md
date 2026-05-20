@@ -7,8 +7,7 @@
 [![GitHub Stars](https://img.shields.io/github/stars/blackoutsecure/docker-dump978?style=flat-square&color=E7931D&logo=github)](https://github.com/blackoutsecure/docker-dump978/stargazers)
 [![Docker Pulls](https://img.shields.io/docker/pulls/blackoutsecure/dump978?style=flat-square&color=E7931D&logo=docker&logoColor=FFFFFF)](https://hub.docker.com/r/blackoutsecure/dump978)
 [![GitHub Release](https://img.shields.io/github/release/blackoutsecure/docker-dump978.svg?style=flat-square&color=E7931D&logo=github&logoColor=FFFFFF)](https://github.com/blackoutsecure/docker-dump978/releases)
-[![Release CI](https://img.shields.io/github/actions/workflow/status/blackoutsecure/docker-dump978/release.yml?style=flat-square&label=release%20ci&color=E7931D)](https://github.com/blackoutsecure/docker-dump978/actions/workflows/release.yml)
-[![Publish CI](https://img.shields.io/github/actions/workflow/status/blackoutsecure/docker-dump978/publish.yml?style=flat-square&label=publish%20ci&color=E7931D)](https://github.com/blackoutsecure/docker-dump978/actions/workflows/publish.yml)
+[![Blackout Secure Launchpad](https://img.shields.io/github/actions/workflow/status/blackoutsecure/docker-dump978/bos-launchpad.yml?style=flat-square&label=blackout%20secure%20launchpad&color=E7931D)](https://github.com/blackoutsecure/docker-dump978/actions/workflows/bos-launchpad.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 
 Containerized [dump978](https://github.com/flightaware/dump978) for decoding 978 MHz UAT ADS-B with RTL-SDR or SoapySDR on Linux.

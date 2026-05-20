@@ -1,0 +1,116 @@
+# Caller for the hub's `bos-launchpad.yml` (Blackout Secure Launchpad) reusable.
+#
+#   monitor (github_branch_file mode) → release (docker → balena)
+#
+# Required vars:    DOCKERHUB_NAMESPACE, BALENA_NAMESPACE
+# Required secrets: DOCKERHUB_USERNAME, DOCKERHUB_TOKEN, BALENA_API_TOKEN
+#
+# `balena.yml` is rendered by the hub on each run from the `balena_*` inputs
+# below. See blackoutsecure/bos-automation-hub for the full input reference.
+name: Blackout Secure Launchpad
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'   # stagger off :00 to dodge org cron pile-ups
+  workflow_dispatch:
+    # `github_release` isn't exposed — this repo opts out of automated
+    # GitHub Releases entirely (hub default `false`).
+    inputs:
+      stage_docker:
+        description: 'Stage: docker build & push'
+        type: boolean
+        default: true
+      stage_balena:
+        description: 'Stage: balena block publish'
+        type: boolean
+        default: true
+      force_run:
+        description: 'Force: run pipeline even if upstream unchanged'
+        type: boolean
+        default: false
+
+# No top-level `concurrency:` — the hub workflow owns serialization.
+# Declaring it on both sides triggers a GHA self-deadlock.
+permissions:
+  contents: read
+
+jobs:
+  release:
+    permissions:
+      contents:        write   # monitor tracking-file commit
+      actions:         write   # nested monitor (`gh workflow run`)
+      pull-requests:   write   # nested Docker Scout PR annotations
+      security-events: write   # nested Docker Scout SARIF upload
+    uses: blackoutsecure/bos-automation-hub/.github/workflows/bos-launchpad.yml@main
+    with:
+      # Schedule runs use the defaults; manual runs honour the dispatch
+      # checkboxes. Every launchpad stage defaults to `false` in the
+      # hub — opt in explicitly. `github_release` is left at its default
+      # (this repo doesn't publish GitHub Releases).
+      docker:           ${{ github.event_name != 'workflow_dispatch' || inputs.stage_docker }}
+      balena:           ${{ github.event_name != 'workflow_dispatch' || inputs.stage_balena }}
+
+      upstream_repo:    wiedehopf/dump978
+      source:           github_branch_file
+      upstream_branch:  dev
+      track_file:       .github/upstream/dump978-dev.json
+      force_run:        ${{ github.event_name == 'workflow_dispatch' && inputs.force_run }}
+      # When force_run is a manual dispatch, also bypass downstream caches
+      # so the rebuild ACTUALLY produces a fresh image + balena release.
+      # Without these, docker re-uses GHA layer cache (same digest) and balena
+      # returns the existing release for the same source SHA — the "force"
+      # ends up being a no-op deploy from the device's perspective.
+      docker_force:     ${{ github.event_name == 'workflow_dispatch' && inputs.force_run }}
+      balena_force:     ${{ github.event_name == 'workflow_dispatch' && inputs.force_run }}
+
+      image_name:          dump978
+      dockerhub_namespace: ${{ vars.DOCKERHUB_NAMESPACE }}
+      balena_namespace:    ${{ vars.BALENA_NAMESPACE }}
+
+      # Render balena.yml dynamically — no checked-in copy.
+      balena_generate_yml: true
+
+      balena_description: >-
+        LinuxServer.io style containerized build of dump978, a high-performance UAT decoder with RTL-SDR support. Features built-in automatic gain optimization,
+        optional bias-T power control, and built-in feed profiles. Outputs JSON and
+        network feeds in a hardened LinuxServer.io-based environment for reliable
+        aircraft signal decoding.
+      balena_post_provisioning: |
+        ## Usage instructions
+
+        Include this snippet in your docker-compose.yml file under 'services':
+
+          ```
+          dump978:
+            image: docker.io/${{ vars.DOCKERHUB_NAMESPACE }}/dump978:latest
+            restart: unless-stopped
+            environment:
+              - TZ=Etc/UTC
+              - DUMP978_NET=true
+              - DUMP978_DEVICE_TYPE=rtlsdr
+              - DUMP978_AUTO_LOCATION=true
+              - DUMP978_AUTOGAIN=true
+              - DUMP978_BIASTEE=false
+              - LOG_LEVEL=info
+            ports:
+              - '30001:30001'
+              - '30002:30002'
+              - '30003:30003'
+              - '30004:30004'
+              - '30005:30005'
+              - '30104:30104'
+            volumes:
+              - '/path/to/dump978/config:/config'
+              - '/path/to/dump978/json:/run/dump978'
+            devices:
+              - '/dev/bus/usb:/dev/bus/usb'
+            security_opt:
+              - 'no-new-privileges:true'
+          ```
+
+        Repository: https://github.com/${{ github.repository }}
+        Upstream application: https://github.com/wiedehopf/dump978
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN:    ${{ secrets.DOCKERHUB_TOKEN }}
+      BALENA_API_TOKEN:   ${{ secrets.BALENA_API_TOKEN }}
