@@ -7,6 +7,7 @@
 [![GitHub Stars](https://img.shields.io/github/stars/blackoutsecure/docker-dump978?style=flat-square&color=E7931D&logo=github)](https://github.com/blackoutsecure/docker-dump978/stargazers)
 [![Docker Pulls](https://img.shields.io/docker/pulls/blackoutsecure/dump978?style=flat-square&color=E7931D&logo=docker&logoColor=FFFFFF)](https://hub.docker.com/r/blackoutsecure/dump978)
 [![GitHub Release](https://img.shields.io/github/release/blackoutsecure/docker-dump978.svg?style=flat-square&color=E7931D&logo=github&logoColor=FFFFFF)](https://github.com/blackoutsecure/docker-dump978/releases)
+[![Balena Hub](https://img.shields.io/badge/balena%20hub-dump978-E7931D?style=flat-square&logo=balena&logoColor=FFFFFF)](https://hub.balena.io/blocks/2354279/dump978)
 [![Blackout Secure Launchpad](https://img.shields.io/github/actions/workflow/status/blackoutsecure/docker-dump978/bos-launchpad.yml?style=flat-square&label=blackout%20secure%20launchpad&color=E7931D)](https://github.com/blackoutsecure/docker-dump978/actions/workflows/bos-launchpad.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 
@@ -27,8 +28,6 @@ Quick links:
 - Balena block listing: [dump978 block on Balena Hub](https://hub.balena.io/blocks/2354279/dump978)
 - GitHub repository: [blackoutsecure/docker-dump978](https://github.com/blackoutsecure/docker-dump978)
 - Upstream application: [flightaware/dump978](https://github.com/flightaware/dump978)
-
-[![balena deploy button](https://www.balena.io/deploy.svg)](https://dashboard.balena-cloud.com/deploy?repoUrl=https://github.com/blackoutsecure/docker-dump978&configUrl=https://raw.githubusercontent.com/blackoutsecure/docker-dump978/main/balena.yml)
 
 ---
 
