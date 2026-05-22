@@ -2,6 +2,10 @@
 
 set -euo pipefail
 
+# shellcheck disable=SC1091
+source /usr/local/bin/log-functions.sh
+SVC_NAME="init"
+
 dump978_user=${DUMP978_USER:-abc}
 dump978_web_port=${DUMP978_WEB_PORT:-8978}
 
@@ -14,11 +18,11 @@ dump978_profile="${dump978_profile,,}"  # lowercase
 case "${dump978_profile}" in
     flightaware|adsbexchange) ;;
     *)
-        printf '[init] WARNING: unknown DUMP978_PROFILE="%s", falling back to "flightaware"\n' "${dump978_profile}" >&2
+        log_warn "unknown DUMP978_PROFILE=\"${dump978_profile}\", falling back to \"flightaware\""
         dump978_profile="flightaware"
         ;;
 esac
-printf '[init] profile: %s\n' "${dump978_profile}"
+log_info "profile: ${dump978_profile}"
 
 # Apply profile-aware defaults
 case "${dump978_profile}" in
@@ -45,7 +49,7 @@ printf '%s' "${DUMP978_TISB_FILTER:-${_profile_tisb_filter}}" > "${_s6_env}/DUMP
 # Also set for use in this script
 export DUMP978_TISB_FILTER="${DUMP978_TISB_FILTER:-${_profile_tisb_filter}}"
 export DUMP978_ENABLE_FAUP978="${_profile_enable_faup978}"
-printf '[init] TIS-B filter: %s, faup978: %s\n' "$(cat "${_s6_env}/DUMP978_TISB_FILTER")" "${_profile_enable_faup978}"
+log_info "TIS-B filter: $(cat "${_s6_env}/DUMP978_TISB_FILTER"), faup978: ${_profile_enable_faup978}"
 
 if [[ "${dump978_user}" != "root" && "${dump978_user}" == "abc" ]]; then
     [[ -z ${PUID:-} ]] && export PUID=911
@@ -74,14 +78,14 @@ source /etc/default/dump978-fa
 
 # Validate SDR configuration
 sdr_device="${DUMP978_SDR:-driver=rtlsdr}"
-printf '[init] SDR device: %s\n' "${sdr_device}"
+log_info "SDR device: ${sdr_device}"
 
 # Check for USB devices (informational only, not fatal)
 if [[ -d /dev/bus/usb ]]; then
     _usb_count=$(find /dev/bus/usb -type c 2>/dev/null | wc -l)
-    printf '[init] USB devices visible: %d\n' "${_usb_count}"
+    log_info "USB devices visible: ${_usb_count}"
 else
-    printf '[init] WARNING: /dev/bus/usb not found — ensure USB device passthrough is configured\n' >&2
+    log_warn "/dev/bus/usb not found — ensure USB device passthrough is configured"
 fi
 
 # Build status.json site_url fragment if stats URL is configured.
@@ -95,7 +99,7 @@ if [[ -n "${stats_url}" ]]; then
     # Escape special chars for safe JSON/sed embedding (quotes, backslash, forward slash, ampersand)
     safe_url=$(printf '%s' "${stats_url}" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/[&/]/\\&/g')
     status_site_url_fragment=",\"site_url\":\"${safe_url}\""
-    printf '[init] stats page URL (%s): %s\n' "${dump978_profile}" "${stats_url}"
+    log_info "stats page URL (${dump978_profile}): ${stats_url}"
 else
     status_site_url_fragment=""
 fi
@@ -136,8 +140,8 @@ if [[ -z "${receiver_lat}" || -z "${receiver_lon}" ]] && [[ "${auto_location}" =
             geo_country=$(printf '%s' "${geo_json}" | grep -o '"country":"[^"]*"' | cut -d'"' -f4)
             geo_isp=$(printf '%s' "${geo_json}" | grep -o '"isp":"[^"]*"' | cut -d'"' -f4)
             geo_tz=$(printf '%s' "${geo_json}" | grep -o '"timezone":"[^"]*"' | cut -d'"' -f4)
-            printf '[init] auto-detected location via IP %s: %s, %s\n' "${geo_ip}" "${receiver_lat}" "${receiver_lon}"
-            printf '[init] approximate location: %s, %s, %s (tz: %s, isp: %s)\n' "${geo_city}" "${geo_region}" "${geo_country}" "${geo_tz}" "${geo_isp}"
+            log_info "auto-detected location via IP ${geo_ip}: ${receiver_lat}, ${receiver_lon}"
+            log_info "approximate location: ${geo_city}, ${geo_region}, ${geo_country} (tz: ${geo_tz}, isp: ${geo_isp})"
         fi
     fi
 fi
@@ -154,7 +158,7 @@ fi
 # Profile defaults are applied first, then explicit env vars override them.
 skyaware_dir="/usr/share/skyaware978"
 if [[ -f /config/skyaware978-config.js ]]; then
-    printf '[init] using custom config.js from /config/skyaware978-config.js\n'
+    log_info "using custom config.js from /config/skyaware978-config.js"
     cp /config/skyaware978-config.js "${skyaware_dir}/config.js"
 else
     cfg="${skyaware_dir}/config.js"
@@ -179,7 +183,7 @@ else
         sed -i "s|^SiteShow    = .*|SiteShow    = true;|" "${cfg}"
         sed -i "s|^SiteLat     = .*|SiteLat     = ${_center_lat};|" "${cfg}"
         sed -i "s|^SiteLon     = .*|SiteLon     = ${_center_lon};|" "${cfg}"
-        printf '[init] config.js: center=%s,%s (site marker enabled)\n' "${_center_lat}" "${_center_lon}"
+        log_info "config.js: center=${_center_lat},${_center_lon} (site marker enabled)"
     fi
     [[ -n "${SKYAWARE_DEFAULT_ZOOM:-}" ]]           && sed -i "s|^DefaultZoomLvl   = .*|DefaultZoomLvl   = ${SKYAWARE_DEFAULT_ZOOM};|" "${cfg}"
     [[ -n "${SKYAWARE_SITE_CIRCLES:-}" ]]           && sed -i "s|^SiteCircles = .*|SiteCircles = ${SKYAWARE_SITE_CIRCLES};|" "${cfg}"
@@ -192,7 +196,7 @@ else
     [[ -n "${SKYAWARE_EXTENDED_DATA:-}" ]]          && sed -i "s|^ExtendedData = .*|ExtendedData = ${SKYAWARE_EXTENDED_DATA};|" "${cfg}"
     [[ -n "${SKYAWARE_PLANE_COUNT_IN_TITLE:-}" ]]   && sed -i "s|^PlaneCountInTitle = .*|PlaneCountInTitle = ${SKYAWARE_PLANE_COUNT_IN_TITLE};|" "${cfg}"
     [[ -n "${SKYAWARE_MSG_RATE_IN_TITLE:-}" ]]      && sed -i "s|^MessageRateInTitle = .*|MessageRateInTitle = ${SKYAWARE_MSG_RATE_IN_TITLE};|" "${cfg}"
-    printf '[init] SkyAware config.js configured (profile: %s)\n' "${dump978_profile}"
+    log_info "SkyAware config.js configured (profile: ${dump978_profile})"
 fi
 
 # ── Cache-busting ──────────────────────────────────────────────────────────
@@ -219,7 +223,7 @@ if [[ "${dump978_profile}" == "adsbexchange" ]]; then
         if [[ -f "${skyaware_dir}/adsbx-theme.css" ]]; then
             sed -i "s|</head>|<link rel=\"stylesheet\" href=\"adsbx-theme.css?v=${_cache_bust}\" />\n</head>|" "${html}"
         fi
-        printf '[init] branding updated for profile: %s\n' "${dump978_profile}"
+        log_info "branding updated for profile: ${dump978_profile}"
     fi
 fi
 
@@ -230,4 +234,4 @@ if [[ -z ${LSIO_NON_ROOT_USER:-} ]]; then
         /usr/share/dump978-fa /usr/share/skyaware978 2>/dev/null || true
 fi
 
-printf '[init] dump978 initialization complete\n'
+log_info "dump978 initialization complete"

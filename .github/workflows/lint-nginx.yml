@@ -1,0 +1,38 @@
+# PR / push CI: validate the in-repo nginx config tree via `nginx -t`.
+# Calls the hub's reusable `nginx-config-validate.yml` against the
+# rendered `root/etc/nginx/` tree. Catches nginx syntax errors,
+# unresolved directives, and missing `include` targets at merge time
+# instead of at container start.
+name: Lint nginx config
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'root/etc/nginx/**'
+      - '.github/workflows/lint-nginx.yml'
+  pull_request:
+    paths:
+      - 'root/etc/nginx/**'
+      - '.github/workflows/lint-nginx.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lint-nginx-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    uses: blackoutsecure/bos-automation-hub/.github/workflows/nginx-config-validate.yml@main
+    with:
+      # Placeholder values used only at validation time. Production
+      # values are resolved at container start by init-dump978-config.
+      # DUMP978_STATUS_SITE_URL_FRAGMENT is intentionally empty here
+      # (default for non-adsbexchange profiles).
+      template_vars: |
+        DUMP978_WEB_PORT=8978
+        DUMP978_RADIO_TYPE=dump978-fa
+        DUMP978_STATUS_SITE_URL_FRAGMENT=

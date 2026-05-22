@@ -2,6 +2,10 @@
 
 set -euo pipefail
 
+# shellcheck disable=SC1091
+source /usr/local/bin/log-functions.sh
+SVC_NAME="skyaware978"
+
 # Source configuration
 source /etc/default/skyaware978
 
@@ -18,21 +22,21 @@ while [[ ${WAIT} -lt ${WAIT_MAX} ]]; do
         break
     fi
     if [[ ${WAIT} -eq 0 ]]; then
-        printf '[skyaware978] waiting for dump978-fa on port %s...\n' "${raw_port}"
+        log_info "waiting for dump978-fa on port ${raw_port}..."
     fi
     sleep 2
     WAIT=$((WAIT + 2))
 done
 
 if [[ ${WAIT} -ge ${WAIT_MAX} ]]; then
-    printf '[skyaware978] WARNING: timed out after %ds waiting for dump978-fa, starting anyway\n' "${WAIT_MAX}" >&2
+    log_warn "timed out after ${WAIT_MAX}s waiting for dump978-fa, starting anyway"
 else
-    printf '[skyaware978] dump978-fa detected on port %s after %ds\n' "${raw_port}" "${WAIT}"
+    log_info "dump978-fa detected on port ${raw_port} after ${WAIT}s"
 fi
 
-printf '[skyaware978] starting SkyAware978 JSON writer\n'
-printf '[skyaware978] connect: %s\n' "${connect}"
-printf '[skyaware978] write dir: %s\n' "${write_dir}"
+log_info "starting SkyAware978 JSON writer"
+log_info "connect: ${connect}"
+log_info "write dir: ${write_dir}"
 
 # Ensure write directory exists
 mkdir -p "${write_dir}"
@@ -52,8 +56,7 @@ SKYAWARE978_ARGS+=(--reconnect-interval "${reconnect_interval}")
 SKYAWARE978_ARGS+=(--history-count "${history_count}")
 SKYAWARE978_ARGS+=(--history-interval "${history_interval}")
 
-printf '[skyaware978] reconnect interval: %ss, history: %s files @ %ss\n' \
-    "${reconnect_interval}" "${history_count}" "${history_interval}"
+log_info "reconnect interval: ${reconnect_interval}s, history: ${history_count} files @ ${history_interval}s"
 
 # Pass receiver location if configured (set by init-dump978-config via env or auto-detection)
 receiver_lat="${DUMP978_LAT:-}"
@@ -61,16 +64,16 @@ receiver_lon="${DUMP978_LON:-}"
 
 if [[ -n "${receiver_lat}" && -n "${receiver_lon}" ]]; then
     SKYAWARE978_ARGS+=(--lat "${receiver_lat}" --lon "${receiver_lon}")
-    printf '[skyaware978] receiver location: %s, %s\n' "${receiver_lat}" "${receiver_lon}"
+    log_info "receiver location: ${receiver_lat}, ${receiver_lon}"
 else
-    printf '[skyaware978] WARNING: no receiver location — site marker and range rings disabled (set DUMP978_LAT/DUMP978_LON or DUMP978_AUTO_LOCATION=true)\n' >&2
+    log_warn "no receiver location — site marker and range rings disabled (set DUMP978_LAT/DUMP978_LON or DUMP978_AUTO_LOCATION=true)"
 fi
 
 # Append extra args if provided
 if [[ -n "${extra_args}" ]]; then
     # shellcheck disable=SC2206
     SKYAWARE978_ARGS+=(${extra_args})
-    printf '[skyaware978] extra args: %s\n' "${extra_args}"
+    log_info "extra args: ${extra_args}"
 fi
 
 exec skyaware978 "${SKYAWARE978_ARGS[@]}"
