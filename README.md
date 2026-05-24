@@ -10,6 +10,7 @@
 [![Balena Hub](https://img.shields.io/badge/balena%20hub-dump978-E7931D?style=flat-square&logo=balena&logoColor=FFFFFF)](https://hub.balena.io/blocks/2354279/dump978)
 [![Blackout Secure Launchpad](https://img.shields.io/github/actions/workflow/status/blackoutsecure/docker-dump978/bos-launchpad.yml?style=flat-square&label=blackout%20secure%20launchpad&color=E7931D)](https://github.com/blackoutsecure/docker-dump978/actions/workflows/bos-launchpad.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](https://opensource.org/licenses/MIT)
+[![Made by BlackoutSecure](https://img.shields.io/badge/made%20by-BlackoutSecure-1f1f1f?style=flat-square)](https://github.com/blackoutsecure)
 
 Containerized [dump978](https://github.com/flightaware/dump978) for decoding 978 MHz UAT ADS-B with RTL-SDR or SoapySDR on Linux.
 
